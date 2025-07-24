@@ -35,9 +35,7 @@
    - 差异展示
 
 7. [性能优化策略](07_performance_optimization.md)
-   - 关键性能瓶颈
-   - 优化方法
-   - 基准测试
+   - 上述md文件中包含优化部分，此处省略
 
 8. [工具系统详解](08_tools_system_detailed.md)
    - 工具注册机制

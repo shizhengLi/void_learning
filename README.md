@@ -25,4 +25,4 @@ The original Void Editor project is included as a submodule. All original code b
 
 ## Contact
 
-For any questions about these learning materials, please contact me at [your-email@example.com]. 
+For any questions about these learning materials, please contact me at [shizhengcs@gmail.com]. 
