@@ -1,5 +1,7 @@
 # Void Learning
 
+*English | [中文](README_zh.md)*
+
 This repository contains my learning notes and study materials for the [Void Editor](https://voideditor.com) project, focusing on AI agent implementation and architecture.
 
 ## Repository Structure
