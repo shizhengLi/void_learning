@@ -1,0 +1,3 @@
+[submodule "void"]
+	path = void
+	url = https://github.com/voideditor/void.git
