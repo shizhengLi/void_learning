@@ -1,129 +1,93 @@
 # Code Editor Agent
 
-A LangChain-based implementation of an AI agent that can interact with codebases, similar to Void's agent functionality.
+An AI-powered code editor agent implemented using LangChain and OpenAI's GPT models. This agent can help you navigate, analyze, and modify codebases through natural language interactions.
 
 ## Features
 
-- **File Operations**: Search, read, and edit files
-- **Terminal Integration**: Execute commands and manage persistent terminals
-- **Approval System**: Safety mechanism for dangerous operations
-- **Multiple Modes**: Standard, detailed, and safe modes
-- **Codebase Analysis**: Detect project type and analyze code structure
+- **File System Tools**: Search, read, edit, and create files
+- **Terminal Tools**: Execute commands, manage persistent terminals
+- **Context Management**: Maintains conversation history for context
+- **Safety Features**: Option to run in read-only mode and require approval for dangerous operations
+- **Customizable**: Configure model, temperature, and behavior through environment variables
+- **Demo Mode**: Run without API access for demonstration purposes
 
 ## Usage
 
-### Installation
+1. Clone this repository
+2. Install dependencies: `pip install -r requirements.txt`
+3. Configure environment variables (create a `.env` file based on `.env.example`)
+4. Run the agent: `python main.py`
 
-1. Install the required dependencies:
+### Command-Line Options
 
-```bash
-pip install -r requirements.txt
-```
+- `--safe`: Run in safe mode (read-only)
+- `--demo`: Run in demo mode with mock responses (no API calls)
+- `--working-dir`: Specify working directory
 
-2. Set up your environment variables in `.env` file:
+## Environment Variables
 
-```
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1  # 可选，用于自定义API端点
-MODEL_NAME=gpt-4o
-TEMPERATURE=0
-```
+Configure these in your `.env` file:
 
-### Running the Agent
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `OPENAI_BASE_URL`: Custom OpenAI API endpoint (optional)
+- `MODEL_NAME`: Model to use (default: "gpt-4o")
+- `TEMPERATURE`: Temperature setting (default: 0)
+- `VERBOSE`: Enable verbose output (default: True)
+- `DETAILED_PROMPT`: Use detailed system prompt (default: False)
+- `SAFE_MODE`: Run in safe mode (read-only) (default: False)
+- `APPROVAL_NEEDED`: Require approval for dangerous operations (default: True)
+- `MAX_ITERATIONS`: Maximum iterations per agent run (default: 10)
+- `MAX_CONSECUTIVE_TOOL_CALLS`: Maximum consecutive calls to the same tool (default: 3)
+- `MAX_IDENTICAL_TOOL_CALLS`: Maximum identical calls to the same tool with same args (default: 2)
 
-Basic usage:
+## Architecture
 
-```bash
-python3 main.py
-```
+The agent consists of several key components:
 
-With command-line options:
+1. **Tools**: Implemented as LangChain `BaseTool` classes:
+   - File tools (`FileSearchTool`, `PathSearchTool`, `FileReadTool`, `FileEditTool`, `FileWriteTool`, `ListDirectoryTool`)
+   - Terminal tools (`ExecuteCommandTool`, `PersistentTerminalCreateTool`, etc.)
 
-```bash
-# Run in safe mode (read-only)
-python3 main.py --safe
+2. **Agent**: `CodeAgent` class that:
+   - Uses OpenAI's function calling API
+   - Manages tool selection based on mode (safe vs. full)
+   - Handles conversation history
+   - Manages approval requests for dangerous operations
 
-# Skip approval for dangerous operations
-python3 main.py --no-approval
+3. **Prompts**: System messages for different modes (standard, detailed, safe)
 
-# Use detailed prompt
-python3 main.py --detailed
+## Safety Features
 
-# Specify model
-python3 main.py --model gpt-3.5-turbo
+The agent includes several safety mechanisms:
 
-# Set working directory
-python3 main.py --dir /path/to/your/project
+1. **Safe Mode**: When enabled, only allows read-only operations
+2. **Approval System**: Prompts for user approval before executing potentially dangerous operations
+3. **Tool Wrappers**: Tools are wrapped with additional validation and error handling
+4. **Loop Prevention**: Detects and prevents infinite loops and repetitive tool calls
+5. **Empty File Detection**: Handles empty files gracefully without entering infinite read loops
+6. **Proper Error Handling**: Provides clear error messages for common issues (file not found, permission denied, etc.)
 
-# Run in demo mode (no API calls)
-python3 main.py --demo
-```
+## Custom API Endpoint
 
-### Using Custom API Endpoint
-
-If you need to use a custom OpenAI API endpoint, set the `OPENAI_BASE_URL` environment variable:
+To use a custom OpenAI API endpoint, set the `OPENAI_BASE_URL` environment variable in your `.env` file:
 
 ```
 OPENAI_BASE_URL=https://your-custom-endpoint.com/v1
 ```
 
-This is useful when:
-- Using OpenAI-compatible API services
-- Working with a proxy server
-- Using local model deployments
-
-## Examples
-
-Here are some examples of what you can ask the agent:
-
-1. **Project Analysis**:
-   - "What kind of project is this?"
-   - "List all Python files in this codebase"
-   - "How many lines of code are in this project?"
-
-2. **Code Search**:
-   - "Find all functions that handle file operations"
-   - "Search for files containing 'TODO' comments"
-   - "Where is the main entry point of this application?"
-
-3. **Code Editing**:
-   - "Add error handling to the file_read function"
-   - "Rename the 'process_data' function to 'process_input' in all files"
-   - "Create a new utility function for parsing JSON"
-
-4. **Terminal Operations**:
-   - "Run unit tests for the project"
-   - "Check the current Python version"
-   - "Install the requests package"
-
-## Architecture
-
-The agent is built with the following components:
-
-1. **File Tools**: Tools for file system operations
-2. **Terminal Tools**: Tools for command execution
-3. **Agent Core**: LangChain agent for reasoning
-4. **Approval System**: Safety mechanism for dangerous operations
-5. **Helper Utilities**: Code analysis and search helpers
-
-## Safety Features
-
-- **Safe Mode**: Restricts the agent to read-only operations
-- **Approval System**: Requires user approval for dangerous operations
-- **Error Handling**: Graceful error handling for commands and file operations
+This is useful for:
+- Using OpenAI-compatible APIs hosted on your own infrastructure
+- Routing requests through a proxy
+- Using third-party API compatibility layers
 
 ## Customization
 
-You can customize the agent by:
+To extend or customize the agent:
 
-- Modifying the system prompts in `agent/prompts.py`
-- Adding new tools in `tools/` directory
-- Adjusting safety settings in the `.env` file
-
-## Credits
-
-This implementation is based on the Void Editor's agent architecture, as described in the Void Learning repository.
+1. Add new tools by creating subclasses of `BaseTool`
+2. Modify system prompts in `agent/prompts.py`
+3. Adjust safety parameters in `.env` or via command line arguments
 
 ## License
 
-MIT License 
+[MIT License](LICENSE) 
