@@ -24,6 +24,14 @@ An AI-powered code editor agent implemented using LangChain and OpenAI's GPT mod
 - `--demo`: Run in demo mode with mock responses (no API calls)
 - `--working-dir`: Specify working directory
 
+## Use Cases and Examples
+
+Check out our documented use cases to see the agent in action:
+
+- [Empty File Handling](examples/empty_file_handling_case.md) - Demonstrates how the agent handles empty files and prevents infinite tool call loops
+
+These examples showcase the agent's capabilities, robustness, and safety features in real-world scenarios.
+
 ## Environment Variables
 
 Configure these in your `.env` file:
