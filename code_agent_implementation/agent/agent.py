@@ -3,16 +3,88 @@ Code editor agent implementation.
 """
 
 import os
+import inspect
+import json
 from typing import List, Dict, Any, Optional, Union
 from dotenv import load_dotenv
 
-from langchain.agents import AgentExecutor, create_react_agent
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.agents import AgentExecutor
+from langchain.agents.format_scratchpad import format_to_openai_function_messages
+from langchain.agents.output_parsers import OpenAIFunctionsAgentOutputParser
 from langchain_openai import ChatOpenAI
 from langchain.tools import BaseTool
-from langchain.memory import ConversationBufferMemory
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables.config import RunnableConfig
+from langchain.memory.chat_memory import InMemoryChatMessageHistory
 from langchain.callbacks import StdOutCallbackHandler
 
-from .prompts import SYSTEM_PROMPT, DETAILED_SYSTEM_PROMPT, SAFE_SYSTEM_PROMPT
+from .prompts import SYSTEM_MESSAGE, DETAILED_SYSTEM_MESSAGE, SAFE_SYSTEM_MESSAGE
+
+
+def _convert_tool_to_openai_function(tool: BaseTool) -> Dict[str, Any]:
+    """Convert a LangChain tool to an OpenAI function format.
+    
+    Args:
+        tool: The tool to convert
+        
+    Returns:
+        The tool in OpenAI function format
+    """
+    # Get function signature
+    schema = {"type": "object", "properties": {}}
+    parameters = {}
+    
+    # Get signature of the _run method
+    sig = inspect.signature(tool._run)
+    
+    # Add required parameters
+    required_params = []
+    
+    for name, param in sig.parameters.items():
+        # Skip 'self'
+        if name == "self":
+            continue
+            
+        # Get parameter type and default
+        param_type = "string"  # Default type
+        has_default = param.default != inspect.Parameter.empty
+        
+        # Try to infer type from annotation
+        if param.annotation != inspect.Parameter.empty:
+            if param.annotation == str:
+                param_type = "string"
+            elif param.annotation == int:
+                param_type = "integer"
+            elif param.annotation == float:
+                param_type = "number"
+            elif param.annotation == bool:
+                param_type = "boolean"
+            
+        # Add parameter to schema
+        parameters[name] = {"type": param_type}
+        
+        # Add description if available
+        if hasattr(tool, "arg_descriptions") and name in tool.arg_descriptions:
+            parameters[name]["description"] = tool.arg_descriptions.get(name)
+            
+        # If no default value, it's required
+        if not has_default:
+            required_params.append(name)
+    
+    # Build the function definition
+    schema["properties"] = parameters
+    if required_params:
+        schema["required"] = required_params
+        
+    function_def = {
+        "name": tool.name,
+        "description": tool.description,
+        "parameters": schema
+    }
+    
+    return function_def
 
 
 class CodeAgent:
@@ -48,11 +120,8 @@ class CodeAgent:
         self.approval_needed = approval_needed
         self.safe_mode = safe_mode
         
-        # Initialize memory
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
+        # Initialize memory using the new approach
+        self.chat_history = InMemoryChatMessageHistory()
         
         # Select which tools to use based on mode
         if safe_mode:
@@ -74,19 +143,41 @@ class CodeAgent:
             
         self.llm = ChatOpenAI(**llm_kwargs)
         
-        # Select which prompt to use
+        # Select which prompt template to use
         if safe_mode:
-            prompt = SAFE_SYSTEM_PROMPT
+            system_message = SAFE_SYSTEM_MESSAGE
         elif detailed_prompt:
-            prompt = DETAILED_SYSTEM_PROMPT
+            system_message = DETAILED_SYSTEM_MESSAGE
         else:
-            prompt = SYSTEM_PROMPT
+            system_message = SYSTEM_MESSAGE
             
-        # Create the agent
-        self.agent = create_react_agent(
-            llm=self.llm,
-            tools=self.active_tools,
-            prompt=prompt
+        # Create the prompt
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_message),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ]
+        )
+        
+        # Convert tools to OpenAI functions
+        openai_functions = [_convert_tool_to_openai_function(tool) for tool in self.active_tools]
+        
+        # Create the agent using the new LangChain API
+        self.agent = (
+            {
+                "input": lambda x: x["input"],
+                "chat_history": lambda x: x.get("chat_history", []),
+                "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                    x.get("intermediate_steps", [])
+                ),
+                "tools": lambda _: self._get_tools_description(),
+                "tool_names": lambda _: ", ".join([tool.name for tool in self.active_tools]),
+            }
+            | prompt
+            | self.llm.bind(functions=openai_functions)
+            | OpenAIFunctionsAgentOutputParser()
         )
         
         # Create the callbacks
@@ -98,7 +189,6 @@ class CodeAgent:
         self.agent_executor = AgentExecutor(
             agent=self.agent,
             tools=self.active_tools,
-            memory=self.memory,
             verbose=verbose,
             handle_parsing_errors=True,
             max_iterations=15,
@@ -114,31 +204,48 @@ class CodeAgent:
         Returns:
             Dictionary with agent response
         """
+        # Add user message to chat history
+        self.chat_history.add_user_message(query)
+        
         # If approval is needed, wrap the tools with approval handlers
         if self.approval_needed and not self.safe_mode:
             # Create wrapped tools with approval
             wrapped_tools = self._wrap_tools_with_approval()
             
-            # Create a new agent executor with wrapped tools
-            temp_agent = create_react_agent(
-                llm=self.llm,
-                tools=wrapped_tools,
-                prompt=self.agent.prompt
-            )
-            
+            # Create a temporary agent executor with wrapped tools
             temp_executor = AgentExecutor(
-                agent=temp_agent,
+                agent=self.agent,
                 tools=wrapped_tools,
-                memory=self.memory,
                 verbose=self.verbose,
                 handle_parsing_errors=True,
                 max_iterations=15
             )
             
-            return await temp_executor.ainvoke({"input": query})
+            # Run the agent
+            result = await temp_executor.ainvoke({
+                "input": query, 
+                "chat_history": self.chat_history.messages
+            })
         else:
             # Run without approval
-            return await self.agent_executor.ainvoke({"input": query})
+            result = await self.agent_executor.ainvoke({
+                "input": query, 
+                "chat_history": self.chat_history.messages
+            })
+        
+        # Add AI response to chat history
+        self.chat_history.add_ai_message(result["output"])
+        
+        return result
+    
+    def _get_tools_description(self) -> str:
+        """Get a string description of all available tools.
+        
+        Returns:
+            String description of all tools
+        """
+        return "\n".join([f"{i+1}. {tool.name}: {tool.description}" 
+                         for i, tool in enumerate(self.active_tools)])
         
     def _is_dangerous_tool(self, tool_name: str) -> bool:
         """Check if a tool is considered dangerous.

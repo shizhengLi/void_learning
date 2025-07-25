@@ -29,8 +29,6 @@ IMPORTANT: When completing a task, provide a brief summary of what you did and a
 {agent_scratchpad}
 """
 
-SYSTEM_PROMPT = PromptTemplate.from_template(SYSTEM_MESSAGE)
-
 # Detailed system message with more context
 DETAILED_SYSTEM_MESSAGE = """You are an advanced code editor agent designed to assist with software development tasks.
 You have the ability to search, read, and edit files, as well as execute commands in the terminal.
@@ -68,8 +66,6 @@ Remember to be precise when specifying file paths and search patterns.
 {agent_scratchpad}
 """
 
-DETAILED_SYSTEM_PROMPT = PromptTemplate.from_template(DETAILED_SYSTEM_MESSAGE)
-
 # System message for safe mode (more restrictions)
 SAFE_SYSTEM_MESSAGE = """You are a code editor agent operating in SAFE MODE.
 In this mode, you have limited capabilities to protect against accidental or harmful changes.
@@ -87,6 +83,4 @@ You can analyze code and provide recommendations, but you CANNOT:
 If a user requests changes, provide the exact code they should use, but do not attempt to make the changes yourself.
 
 {agent_scratchpad}
-"""
-
-SAFE_SYSTEM_PROMPT = PromptTemplate.from_template(SAFE_SYSTEM_MESSAGE) 
+""" 
