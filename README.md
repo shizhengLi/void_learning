@@ -8,18 +8,29 @@ This repository contains my learning notes and study materials for the [Void Edi
 
 - **void/** - Git submodule of the original [Void Editor](https://github.com/voideditor/void) repository
 - **learning_notes/** - My personal notes and learning materials about Void's AI agent system
+- **code_agent_implementation/** - A complete LangChain-based implementation of an AI code editor agent inspired by Void's architecture
 
 ## Purpose
 
-This repository serves as my personal learning journal while studying the Void editor's AI agent implementation. The notes document my understanding of:
+This repository serves as my personal learning journal while studying the Void editor's AI agent implementation. The project includes both theoretical analysis and practical implementation:
 
-- System architecture
-- Agent core implementation 
+### Learning & Analysis
+- System architecture research
+- Agent core implementation study
 - Code understanding mechanisms
-- Terminal integration
+- Terminal integration analysis
 - Editing and change application systems
 - Performance optimization strategies
 - Tools system implementation
+
+### Practical Implementation
+The `code_agent_implementation/` directory contains a fully functional AI code editor agent built with LangChain, featuring:
+- File system tools (search, read, edit, write)
+- Terminal tools (command execution, persistent terminals)
+- Context management and conversation history
+- Safety features with approval system
+- Multiple operation modes (standard, detailed, safe)
+- Demo mode for showcasing capabilities
 
 ## Original Project
 

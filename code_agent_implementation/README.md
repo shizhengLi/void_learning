@@ -29,6 +29,8 @@ An AI-powered code editor agent implemented using LangChain and OpenAI's GPT mod
 Check out our documented use cases to see the agent in action:
 
 - [Empty File Handling](examples/empty_file_handling_case.md) - Demonstrates how the agent handles empty files and prevents infinite tool call loops
+- [Project Indexing and Analysis](examples/project_indexing_and_analysis.md) - Shows how the agent analyzes complex project structures, explains technical concepts like indexing, and provides comprehensive codebase understanding
+- [Terminal Interaction Demo](examples/terminal_interaction_demo.md) - Real-world terminal interaction showing file editing, command tool usage, and natural language processing capabilities
 
 These examples showcase the agent's capabilities, robustness, and safety features in real-world scenarios.
 
