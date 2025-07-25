@@ -1,14 +1,22 @@
 """
 Main entry point for the code editor agent.
+This script initializes the agent and provides a simple REPL for interaction.
 """
 
 import os
-import asyncio
 import argparse
+import asyncio
 from dotenv import load_dotenv
 
-# Load tools
-from tools.file_tools import FileSearchTool, PathSearchTool, FileReadTool, FileEditTool, FileWriteTool
+# Import tools
+from tools.file_tools import (
+    FileSearchTool, 
+    PathSearchTool, 
+    FileReadTool, 
+    FileEditTool, 
+    FileWriteTool,
+    ListDirectoryTool
+)
 from tools.terminal_tools import (
     ExecuteCommandTool, 
     PersistentTerminalCreateTool,
@@ -17,165 +25,157 @@ from tools.terminal_tools import (
     ListTerminalsTool
 )
 
-# Load agent
-from agent.agent import CodeAgent, create_agent_from_env
-
-
-def parse_arguments():
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Code Editor Agent")
-    parser.add_argument("--safe", action="store_true", help="Run in safe mode (read-only)")
-    parser.add_argument("--no-approval", action="store_true", help="Don't require approval for dangerous operations")
-    parser.add_argument("--detailed", action="store_true", help="Use detailed prompt")
-    parser.add_argument("--model", type=str, help="Model name to use")
-    parser.add_argument("--dir", type=str, help="Working directory")
-    parser.add_argument("--demo", action="store_true", help="Run in demo mode with mock responses")
-    return parser.parse_args()
+# Import agent
+from agent.agent import create_agent_from_env
 
 
 class MockAgent:
-    """Mock agent for demonstration purposes."""
+    """Mock agent for demo purposes."""
     
-    def __init__(self, safe_mode=False, approval_needed=True):
-        """Initialize the mock agent."""
-        self.safe_mode = safe_mode
-        self.approval_needed = approval_needed
-        
     async def run(self, query):
-        """Mock run method that returns predefined responses based on the query."""
-        query_lower = query.lower()
+        """Run the agent with a query.
         
-        # Demo responses for common queries
-        if "hello" in query_lower or "hi" in query_lower:
-            return {
-                "output": "Hello! I'm the Code Editor Agent. I can help you search, read, and edit files, as well as run commands."
-            }
-        elif "what can you do" in query_lower:
-            return {
-                "output": "I can:\n- Search for files and content\n- Read and edit files\n- Execute terminal commands\n- Help analyze and modify code"
-            }
-        elif "search" in query_lower and "todo" in query_lower:
-            return {
-                "output": "I found a TODO comment in geometry.py: 'TODO: Add functions for triangle calculations'"
-            }
-        elif "error handling" in query_lower:
-            if self.safe_mode:
-                return {
-                    "output": "I'm in safe mode, so I can't edit files directly. Here's the code change you need:\n\n```python\ndef divide(a, b):\n    \"\"\"Divide a by b and return the result.\"\"\"\n    if b == 0:\n        raise ValueError(\"Cannot divide by zero\")\n    return a / b\n```"
-                }
-            else:
-                return {
-                    "output": "I've added error handling to the divide function in calculator.py. The function now raises a ValueError when trying to divide by zero."
-                }
-        elif "add triangle" in query_lower:
-            if self.safe_mode:
-                return {
-                    "output": "I'm in safe mode, so I can't edit files directly. Here's the code you should add to geometry.py:\n\n```python\ndef calculate_triangle_area(base, height):\n    \"\"\"Calculate the area of a triangle.\"\"\"\n    return 0.5 * base * height\n\ndef calculate_triangle_perimeter(a, b, c):\n    \"\"\"Calculate the perimeter of a triangle with sides a, b, and c.\"\"\"\n    return a + b + c\n```"
-                }
-            else:
-                return {
-                    "output": "I've added functions for triangle calculations to geometry.py. You can now calculate the area and perimeter of triangles."
-                }
-        elif "list files" in query_lower:
-            return {
-                "output": "Here are the files in the project:\n- demo_project/\n  - README.md\n  - src/\n    - calculator.py\n    - geometry.py"
-            }
+        Args:
+            query: The query to run
+            
+        Returns:
+            The response
+        """
+        if "hello" in query.lower():
+            return {"output": "Hello! I'm a mock agent. I can't actually do anything, but I can pretend to!"}
+        elif "file" in query.lower():
+            return {"output": "I found some files that might be relevant: example.py, main.py"}
+        elif "search" in query.lower():
+            return {"output": "I searched for that and found some results in the mock_directory."}
         else:
-            return {
-                "output": "I understand you're asking about: " + query + "\n\nIn a real implementation, I would process this query using the LLM. For this demo, I'm using predefined responses."
-            }
+            return {"output": "I'm just a mock agent. In the real version, I would try to help with your request."}
 
 
-async def main():
+async def repl(agent, working_dir):
+    """Run the agent in a REPL.
+    
+    Args:
+        agent: The agent to run
+        working_dir: The working directory
+    """
+    print("\n🤖 Code Editor Agent initialized.")
+    print(f"🌎 Working directory: {working_dir}")
+    
+    # Print mode information
+    if hasattr(agent, "safe_mode") and agent.safe_mode:
+        print("🔒 Safe mode: Enabled")
+    else:
+        print("🔒 Safe mode: Disabled")
+        
+    if hasattr(agent, "approval_needed") and agent.approval_needed:
+        print("✅ Approval required: Yes")
+    else:
+        print("✅ Approval required: No")
+    
+    if hasattr(agent, "llm") and hasattr(agent.llm, "model_name"):
+        print(f"🧠 Model: {agent.llm.model_name}")
+    
+    print("\nType 'exit' or 'quit' to end the session.\n")
+    
+    while True:
+        try:
+            user_input = input("\n💻 > ")
+            
+            if user_input.lower() in ['exit', 'quit']:
+                print("\nExiting Code Editor Agent. Goodbye! 👋")
+                break
+                
+            print("\n🧠 Thinking...\n")
+            
+            response = await agent.run(user_input)
+            
+            print("\n🤖 Agent response:")
+            print(response["output"])
+            
+        except KeyboardInterrupt:
+            print("\n\nExiting Code Editor Agent. Goodbye! 👋")
+            break
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
+
+
+def init_tools():
+    """Initialize the tools.
+    
+    Returns:
+        List of initialized tools
+    """
+    # File tools
+    file_search = FileSearchTool()
+    path_search = PathSearchTool()
+    file_read = FileReadTool()
+    file_edit = FileEditTool()
+    file_write = FileWriteTool()
+    list_directory = ListDirectoryTool()
+    
+    # Terminal tools
+    execute_command = ExecuteCommandTool()
+    open_terminal = PersistentTerminalCreateTool()
+    run_in_terminal = PersistentTerminalCommandTool()
+    kill_terminal = PersistentTerminalKillTool()
+    list_terminals = ListTerminalsTool()
+    
+    # Return all tools
+    return [
+        file_search,
+        path_search,
+        file_read,
+        file_edit,
+        file_write,
+        list_directory,
+        execute_command,
+        open_terminal,
+        run_in_terminal,
+        kill_terminal,
+        list_terminals
+    ]
+
+
+def main():
     """Main entry point."""
     # Parse arguments
-    args = parse_arguments()
+    parser = argparse.ArgumentParser(description="Code Editor Agent")
+    parser.add_argument("--safe", action="store_true", help="Run in safe mode (read-only)")
+    parser.add_argument("--demo", action="store_true", help="Run in demo mode (no API calls)")
+    parser.add_argument("--working-dir", type=str, help="Working directory")
+    args = parser.parse_args()
     
-    # Set working directory if provided
-    if args.dir:
-        os.chdir(args.dir)
+    # Set working directory
+    if args.working_dir:
+        working_dir = args.working_dir
+        if not os.path.isabs(working_dir):
+            working_dir = os.path.abspath(working_dir)
     else:
-        # Default to demo project directory if not specified
-        demo_dir = os.path.join(os.getcwd(), "demo_project")
-        if os.path.exists(demo_dir):
-            os.chdir(demo_dir)
+        # 使用当前目录作为默认工作目录，而不是demo_project
+        working_dir = os.getcwd()
+    
+    # Change to the working directory
+    os.chdir(working_dir)
     
     # Load environment variables
     load_dotenv()
     
-    # Set environment variables based on arguments
-    if args.safe:
-        os.environ["SAFE_MODE"] = "True"
-    if args.no_approval:
-        os.environ["APPROVAL_NEEDED"] = "False"
-    if args.detailed:
-        os.environ["DETAILED_PROMPT"] = "True"
-    if args.model:
-        os.environ["MODEL_NAME"] = args.model
+    # Initialize tools
+    tools = init_tools()
     
-    # Print startup information
-    print("\n🤖 Code Editor Agent initialized.")
-    print(f"🌎 Working directory: {os.getcwd()}")
-    
+    # Initialize agent
     if args.demo:
-        # Use the mock agent for demonstration
-        agent = MockAgent(safe_mode=args.safe, approval_needed=not args.no_approval)
-        print(f"🔒 Safe mode: {'Enabled' if agent.safe_mode else 'Disabled'}")
-        print(f"✅ Approval required: {'Yes' if agent.approval_needed else 'No'}")
-        print(f"🎮 Running in DEMO mode (no API calls)")
+        agent = MockAgent()
     else:
-        # Initialize tools
-        tools = [
-            FileSearchTool(),
-            PathSearchTool(),
-            FileReadTool(),
-            FileEditTool(),
-            FileWriteTool(),
-            ExecuteCommandTool(),
-            PersistentTerminalCreateTool(),
-            PersistentTerminalCommandTool(),
-            PersistentTerminalKillTool(),
-            ListTerminalsTool()
-        ]
-        
-        # Initialize agent
-        agent = create_agent_from_env(tools)
-        print(f"🔒 Safe mode: {'Enabled' if agent.safe_mode else 'Disabled'}")
-        print(f"✅ Approval required: {'Yes' if agent.approval_needed else 'No'}")
-        print(f"🧠 Model: {os.getenv('MODEL_NAME', 'gpt-4o')}")
-    
-    print("\nType 'exit' or 'quit' to end the session.\n")
-    
-    # Show example commands in demo mode
-    if args.demo:
-        print("Demo commands you can try:")
-        print("- \"Hello\"")
-        print("- \"What can you do?\"")
-        print("- \"Search for TODO comments\"")
-        print("- \"Add error handling to divide function\"")
-        print("- \"Add triangle calculations to geometry\"")
-        print("- \"List files in this project\"")
-        print()
-    
-    # REPL loop
-    while True:
-        query = input("\n💻 > ")
-        
-        if query.lower() in ['exit', 'quit']:
-            print("\nExiting Code Editor Agent. Goodbye! 👋\n")
-            break
+        # Override environment variables based on arguments
+        if args.safe:
+            os.environ["SAFE_MODE"] = "True"
             
-        try:
-            print("\n🧠 Thinking...")
-            response = await agent.run(query)
-            print("\n🤖 Agent response:")
-            print(response["output"])
-        except Exception as e:
-            print(f"\n❌ Error: {str(e)}")
+        agent = create_agent_from_env(tools)
+        
+    # Run the REPL
+    asyncio.run(repl(agent, working_dir))
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n\nExiting Code Editor Agent. Goodbye! 👋\n") 
+    main() 
