@@ -5,7 +5,8 @@ Code editor agent implementation.
 import os
 import inspect
 import json
-from typing import List, Dict, Any, Optional, Union
+import hashlib
+from typing import List, Dict, Any, Optional, Union, Tuple, Set
 from dotenv import load_dotenv
 
 from langchain_core.messages import AIMessage, HumanMessage, FunctionMessage
@@ -19,8 +20,69 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.runnables.config import RunnableConfig
 from langchain.memory.chat_memory import InMemoryChatMessageHistory
 from langchain.callbacks import StdOutCallbackHandler
+from langchain.callbacks.base import BaseCallbackHandler
 
 from .prompts import SYSTEM_MESSAGE, DETAILED_SYSTEM_MESSAGE, SAFE_SYSTEM_MESSAGE
+
+
+# Custom callback handler to track and prevent tool call loops
+class LoopPreventionHandler(BaseCallbackHandler):
+    """Callback handler to prevent infinite loops in tool calls."""
+
+    def __init__(self, max_consecutive_calls: int = 3, max_identical_calls: int = 2):
+        """Initialize the loop prevention handler.
+        
+        Args:
+            max_consecutive_calls: Maximum number of consecutive calls to the same tool
+            max_identical_calls: Maximum number of identical calls (same tool + same args)
+        """
+        self.tool_call_history = []
+        self.consecutive_calls = {}
+        self.identical_calls = {}
+        self.max_consecutive_calls = max_consecutive_calls
+        self.max_identical_calls = max_identical_calls
+
+    def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs) -> None:
+        """Called when a tool starts running.
+        
+        Args:
+            serialized: Information about the tool
+            input_str: Input to the tool
+        """
+        tool_name = serialized.get("name", "unknown")
+        
+        # Create a hash of tool name + args to track identical calls
+        call_hash = hashlib.md5(f"{tool_name}:{input_str}".encode()).hexdigest()
+        
+        # Track consecutive calls to the same tool
+        if tool_name in self.consecutive_calls:
+            self.consecutive_calls[tool_name] += 1
+        else:
+            self.consecutive_calls = {tool_name: 1}
+            
+        # Track identical calls
+        if call_hash in self.identical_calls:
+            self.identical_calls[call_hash] += 1
+        else:
+            self.identical_calls[call_hash] = 1
+            
+        # Check for loops
+        if self.consecutive_calls[tool_name] > self.max_consecutive_calls:
+            raise ValueError(
+                f"Potential infinite loop detected: Tool '{tool_name}' called {self.consecutive_calls[tool_name]} times consecutively."
+            )
+        
+        if self.identical_calls[call_hash] > self.max_identical_calls:
+            raise ValueError(
+                f"Potential infinite loop detected: Identical call to '{tool_name}' with the same arguments detected multiple times."
+            )
+        
+        # Add to history
+        self.tool_call_history.append((tool_name, input_str))
+        
+        # Keep history at a reasonable size
+        if len(self.tool_call_history) > 100:
+            self.tool_call_history = self.tool_call_history[-100:]
 
 
 def _convert_tool_to_openai_function(tool: BaseTool) -> Dict[str, Any]:
@@ -121,7 +183,10 @@ class CodeAgent:
         verbose: bool = True,
         detailed_prompt: bool = False,
         safe_mode: bool = False,
-        approval_needed: bool = True
+        approval_needed: bool = True,
+        max_iterations: int = 10,
+        max_consecutive_tool_calls: int = 3,
+        max_identical_tool_calls: int = 2
     ):
         """Initialize the code agent with tools and model.
         
@@ -135,14 +200,24 @@ class CodeAgent:
             detailed_prompt: Whether to use the detailed prompt
             safe_mode: Whether to run in safe mode (read-only)
             approval_needed: Whether to require approval for dangerous operations
+            max_iterations: Maximum number of iterations for the agent
+            max_consecutive_tool_calls: Maximum number of consecutive calls to the same tool
+            max_identical_tool_calls: Maximum number of identical calls to the same tool with same args
         """
         self.tools = tools
         self.verbose = verbose
         self.approval_needed = approval_needed
         self.safe_mode = safe_mode
+        self.max_iterations = max_iterations
         
         # Initialize memory using the new approach
         self.chat_history = InMemoryChatMessageHistory()
+        
+        # Initialize loop prevention
+        self.loop_prevention = LoopPreventionHandler(
+            max_consecutive_calls=max_consecutive_tool_calls,
+            max_identical_calls=max_identical_tool_calls
+        )
         
         # Select which tools to use based on mode
         if safe_mode:
@@ -202,7 +277,7 @@ class CodeAgent:
         )
         
         # Create the callbacks
-        callbacks = []
+        callbacks = [self.loop_prevention]
         if verbose:
             callbacks.append(StdOutCallbackHandler())
             
@@ -212,9 +287,45 @@ class CodeAgent:
             tools=self.active_tools,
             verbose=verbose,
             handle_parsing_errors=True,
-            max_iterations=15,
+            max_iterations=self.max_iterations,
             callbacks=callbacks
         )
+    
+    def _wrap_tool_for_safety(self, tool: BaseTool) -> BaseTool:
+        """Wrap a tool with additional safety checks.
+        
+        Args:
+            tool: The tool to wrap
+            
+        Returns:
+            Wrapped tool with safety checks
+        """
+        original_run = tool._run
+        
+        def safe_run(*args, **kwargs):
+            try:
+                # For file operations, check if file exists first for certain tools
+                if tool.name == "read_file" and "file_path" in kwargs:
+                    file_path = kwargs["file_path"]
+                    if not os.path.exists(file_path):
+                        return f"Error: File '{file_path}' does not exist. Please verify the path."
+                    
+                # Run the original tool
+                result = original_run(*args, **kwargs)
+                
+                # Ensure result is not None
+                if result is None:
+                    return "Operation completed successfully but returned no output."
+                
+                return result
+            except Exception as e:
+                # Provide a helpful error message
+                return f"Error using {tool.name}: {str(e)}"
+        
+        # Replace the original run method with the safe version
+        tool._run = safe_run
+        
+        return tool
         
     async def run(self, query: str) -> Dict[str, Any]:
         """Run the agent on a query.
@@ -225,13 +336,19 @@ class CodeAgent:
         Returns:
             Dictionary with agent response
         """
+        # Reset loop prevention handler for new query
+        self.loop_prevention = LoopPreventionHandler()
+        
         # Add user message to chat history
         self.chat_history.add_user_message(query)
+        
+        # Wrap tools with safety checks
+        safe_tools = [self._wrap_tool_for_safety(tool) for tool in self.active_tools]
         
         # If approval is needed, wrap the tools with approval handlers
         if self.approval_needed and not self.safe_mode:
             # Create wrapped tools with approval
-            wrapped_tools = self._wrap_tools_with_approval()
+            wrapped_tools = self._wrap_tools_with_approval(safe_tools)
             
             # Create a temporary agent executor with wrapped tools
             temp_executor = AgentExecutor(
@@ -239,7 +356,8 @@ class CodeAgent:
                 tools=wrapped_tools,
                 verbose=self.verbose,
                 handle_parsing_errors=True,
-                max_iterations=15
+                max_iterations=self.max_iterations,
+                callbacks=[self.loop_prevention]
             )
             
             try:
@@ -261,8 +379,18 @@ class CodeAgent:
                 return {"output": error_message}
         else:
             try:
+                # Create a temporary agent executor with safe tools
+                temp_executor = AgentExecutor(
+                    agent=self.agent,
+                    tools=safe_tools,
+                    verbose=self.verbose,
+                    handle_parsing_errors=True,
+                    max_iterations=self.max_iterations,
+                    callbacks=[self.loop_prevention]
+                )
+                
                 # Run without approval
-                result = await self.agent_executor.ainvoke({
+                result = await temp_executor.ainvoke({
                     "input": query, 
                     "chat_history": self.chat_history.messages
                 })
@@ -306,15 +434,18 @@ class CodeAgent:
         ]
         return tool_name in dangerous_tools
     
-    def _wrap_tools_with_approval(self) -> List[BaseTool]:
+    def _wrap_tools_with_approval(self, tools: List[BaseTool]) -> List[BaseTool]:
         """Wrap tools with approval handlers.
         
+        Args:
+            tools: List of tools to wrap
+            
         Returns:
             List of wrapped tools
         """
         wrapped_tools = []
         
-        for tool in self.active_tools:
+        for tool in tools:
             if self._is_dangerous_tool(tool.name):
                 # Create a wrapped version of the tool
                 wrapped_tool = self._create_approval_wrapped_tool(tool)
@@ -386,16 +517,22 @@ def create_agent_from_env(tools: List[BaseTool]) -> CodeAgent:
     detailed_prompt = os.getenv("DETAILED_PROMPT", "False").lower() == "true"
     safe_mode = os.getenv("SAFE_MODE", "False").lower() == "true"
     approval_needed = os.getenv("APPROVAL_NEEDED", "True").lower() == "true"
+    max_iterations = int(os.getenv("MAX_ITERATIONS", "10"))
+    max_consecutive_calls = int(os.getenv("MAX_CONSECUTIVE_TOOL_CALLS", "3"))
+    max_identical_calls = int(os.getenv("MAX_IDENTICAL_TOOL_CALLS", "2"))
     
     # Create and return the agent
     return CodeAgent(
         tools=tools,
         model_name=model_name,
         api_key=api_key,
-        base_url=base_url,  # Pass the base URL to the agent
+        base_url=base_url,
         temperature=temperature,
         verbose=verbose,
         detailed_prompt=detailed_prompt,
         safe_mode=safe_mode,
-        approval_needed=approval_needed
+        approval_needed=approval_needed,
+        max_iterations=max_iterations,
+        max_consecutive_tool_calls=max_consecutive_calls,
+        max_identical_tool_calls=max_identical_calls
     ) 

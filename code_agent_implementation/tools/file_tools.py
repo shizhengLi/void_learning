@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any, Type
 import os
 import glob
 import re
+import pathlib
 
 
 class FileSearchTool(BaseTool):
@@ -28,6 +29,13 @@ class FileSearchTool(BaseTool):
         """
         if search_dir is None:
             search_dir = os.getcwd()
+        
+        # Check if the directory exists
+        if not os.path.exists(search_dir):
+            return [f"Error: Directory '{search_dir}' does not exist."]
+            
+        if not os.path.isdir(search_dir):
+            return [f"Error: '{search_dir}' is not a directory."]
         
         results = []
         for root, _, files in os.walk(search_dir):
@@ -54,6 +62,9 @@ class FileSearchTool(BaseTool):
                 if len(results) >= 50:  # Limit results
                     break
         
+        if not results:
+            return [f"No files containing '{query}' found in '{search_dir}'."]
+            
         return results
 
 
@@ -66,22 +77,73 @@ class PathSearchTool(BaseTool):
         """Search for files with names matching the pattern.
         
         Args:
-            query: The filename pattern to search for
-            include_pattern: Optional glob pattern to filter results
+            query: The filename pattern to search for (can be '*' for all files)
+            include_pattern: Optional path or glob pattern (e.g. '/path/to/dir/*.py')
             
         Returns:
             List of matching file paths
         """
-        if include_pattern:
-            files = glob.glob(f"**/{include_pattern}", recursive=True)
-        else:
-            files = []
-            for root, _, filenames in os.walk('.'):
-                for filename in filenames:
-                    if query.lower() in filename.lower():
-                        files.append(os.path.join(root, filename))
+        results = []
         
-        return files[:50]  # Limit to 50 results
+        # If a specific include_pattern is provided (path or glob)
+        if include_pattern:
+            # Handle absolute paths
+            if os.path.isabs(include_pattern):
+                base_dir = os.path.dirname(include_pattern)
+                file_pattern = os.path.basename(include_pattern)
+                
+                # Check if the directory exists
+                if not os.path.exists(base_dir):
+                    return [f"Error: Directory '{base_dir}' does not exist."]
+                
+                # If it's a directory without pattern
+                if os.path.isdir(include_pattern):
+                    base_dir = include_pattern
+                    file_pattern = '*'
+                
+                # Get files with the given pattern in the specified directory
+                if '*' in file_pattern:
+                    for item in glob.glob(os.path.join(base_dir, file_pattern)):
+                        if os.path.isfile(item):
+                            results.append(item)
+                else:
+                    # Specific file
+                    if os.path.exists(include_pattern) and os.path.isfile(include_pattern):
+                        results.append(include_pattern)
+            else:
+                # Relative path or glob pattern
+                for item in glob.glob(include_pattern, recursive=True):
+                    if os.path.isfile(item):
+                        results.append(item)
+        else:
+            # No specific path/pattern provided, search based on query
+            # Special case for '*' to list all files in current directory
+            if query == '*':
+                for root, _, files in os.walk('.'):
+                    for file in files:
+                        results.append(os.path.join(root, file))
+                        if len(results) >= 50:  # Limit results
+                            break
+                    if len(results) >= 50:
+                        break
+            # Search for files containing the query in their name
+            else:
+                for root, _, files in os.walk('.'):
+                    for file in files:
+                        if query.lower() in file.lower():
+                            results.append(os.path.join(root, file))
+                            if len(results) >= 50:  # Limit results
+                                break
+                    if len(results) >= 50:
+                        break
+        
+        if not results:
+            if include_pattern:
+                return [f"No files found matching the pattern '{include_pattern}'."]
+            else:
+                return [f"No files found matching '{query}'."]
+                
+        return results[:50]  # Ensure limit of 50 results
 
 
 class FileReadTool(BaseTool):
@@ -100,6 +162,14 @@ class FileReadTool(BaseTool):
         Returns:
             File contents as a string
         """
+        # First, check if the file exists
+        if not os.path.exists(file_path):
+            return f"Error: File '{file_path}' does not exist. Please verify the path."
+            
+        # Check if it's actually a file
+        if not os.path.isfile(file_path):
+            return f"Error: '{file_path}' is a directory, not a file."
+        
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 if start_line is None and end_line is None:
@@ -109,8 +179,12 @@ class FileReadTool(BaseTool):
                     start = start_line if start_line is not None else 0
                     end = end_line if end_line is not None else len(lines)
                     return ''.join(lines[start:end])
+        except UnicodeDecodeError:
+            return f"Error: File '{file_path}' appears to be a binary file and cannot be read as text."
+        except PermissionError:
+            return f"Error: Permission denied when trying to read '{file_path}'."
         except Exception as e:
-            return f"Error reading file: {str(e)}"
+            return f"Error reading file '{file_path}': {str(e)}"
 
 
 class FileEditTool(BaseTool):
@@ -134,6 +208,14 @@ class FileEditTool(BaseTool):
         Returns:
             Success message or error
         """
+        # First, check if the file exists
+        if not os.path.exists(file_path):
+            return f"Error: File '{file_path}' does not exist. Please verify the path."
+            
+        # Check if it's actually a file
+        if not os.path.isfile(file_path):
+            return f"Error: '{file_path}' is a directory, not a file."
+            
         try:
             # Read the original file
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -141,6 +223,9 @@ class FileEditTool(BaseTool):
             
             # Parse the search/replace blocks
             blocks = self._parse_search_replace_blocks(search_replace_blocks)
+            
+            if not blocks:
+                return "Error: No valid search/replace blocks found. Please check the format."
             
             # Apply each block
             new_content = content
@@ -163,8 +248,12 @@ class FileEditTool(BaseTool):
                 f.write(new_content)
             
             return f"File {file_path} edited successfully with {changes_applied} changes."
+        except UnicodeDecodeError:
+            return f"Error: File '{file_path}' appears to be a binary file and cannot be edited as text."
+        except PermissionError:
+            return f"Error: Permission denied when trying to edit '{file_path}'."
         except Exception as e:
-            return f"Error editing file: {str(e)}"
+            return f"Error editing file '{file_path}': {str(e)}"
     
     def _parse_search_replace_blocks(self, blocks_str: str) -> List[Dict[str, str]]:
         """Parse search/replace blocks from the input string.
@@ -204,15 +293,97 @@ class FileWriteTool(BaseTool):
             Success message or error
         """
         try:
+            # Check if path is a directory
+            if os.path.isdir(file_path):
+                return f"Error: '{file_path}' is a directory, not a file."
+                
             # Create directory if it doesn't exist
             directory = os.path.dirname(file_path)
             if directory and not os.path.exists(directory):
-                os.makedirs(directory)
+                try:
+                    os.makedirs(directory)
+                except PermissionError:
+                    return f"Error: Permission denied when creating directory '{directory}'."
+                except Exception as e:
+                    return f"Error creating directory '{directory}': {str(e)}"
             
             # Write the file
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(content)
             
-            return f"File {file_path} written successfully."
+            return f"File '{file_path}' written successfully."
+        except PermissionError:
+            return f"Error: Permission denied when writing to '{file_path}'."
         except Exception as e:
-            return f"Error writing file: {str(e)}" 
+            return f"Error writing file '{file_path}': {str(e)}"
+
+
+class ListDirectoryTool(BaseTool):
+    """Tool for listing directory contents."""
+    name: str = "list_directory"
+    description: str = "List files and folders in a directory"
+    
+    def _run(self, directory: Optional[str] = None) -> Dict[str, List[str]]:
+        """List files and folders in a directory.
+        
+        Args:
+            directory: Path to the directory to list (defaults to current directory)
+            
+        Returns:
+            Dictionary with 'files' and 'folders' keys containing lists of paths
+        """
+        if directory is None or directory == '.':
+            directory = os.getcwd()
+        
+        # Check if directory exists
+        if not os.path.exists(directory):
+            return {
+                "error": f"Error: Directory '{directory}' does not exist.",
+                "files": [],
+                "folders": [],
+                "directory": directory
+            }
+            
+        # Check if it's actually a directory
+        if not os.path.isdir(directory):
+            return {
+                "error": f"Error: '{directory}' is a file, not a directory.",
+                "files": [],
+                "folders": [],
+                "directory": directory
+            }
+        
+        try:
+            # Get all items in the directory
+            items = os.listdir(directory)
+            
+            # Separate files and folders
+            files = []
+            folders = []
+            
+            for item in items:
+                full_path = os.path.join(directory, item)
+                if os.path.isfile(full_path):
+                    files.append(item)
+                elif os.path.isdir(full_path):
+                    folders.append(item)
+            
+            return {
+                "files": files,
+                "folders": folders,
+                "directory": directory
+            }
+        except PermissionError:
+            return {
+                "error": f"Error: Permission denied when listing directory '{directory}'.",
+                "files": [],
+                "folders": [],
+                "directory": directory
+            }
+        except Exception as e:
+            return {
+                "error": f"Error listing directory '{directory}': {str(e)}",
+                "files": [],
+                "folders": [],
+                "directory": directory
+            } 
