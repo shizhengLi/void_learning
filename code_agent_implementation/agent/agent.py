@@ -23,6 +23,7 @@ class CodeAgent:
         tools: List[BaseTool], 
         model_name: str = "gpt-4o", 
         api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
         temperature: float = 0.0,
         verbose: bool = True,
         detailed_prompt: bool = False,
@@ -35,6 +36,7 @@ class CodeAgent:
             tools: List of tools to provide to the agent
             model_name: Name of the model to use
             api_key: API key for the model provider
+            base_url: Base URL for the OpenAI API (optional for custom endpoints)
             temperature: Temperature for the model
             verbose: Whether to enable verbose output
             detailed_prompt: Whether to use the detailed prompt
@@ -57,13 +59,20 @@ class CodeAgent:
             self.active_tools = [tool for tool in tools if not self._is_dangerous_tool(tool.name)]
         else:
             self.active_tools = tools
+        
+        # Initialize LLM with optional custom base_url
+        llm_kwargs = {
+            "model": model_name,
+            "temperature": temperature,
+        }
+        
+        if api_key:
+            llm_kwargs["api_key"] = api_key
             
-        # Initialize LLM
-        self.llm = ChatOpenAI(
-            model=model_name,
-            temperature=temperature,
-            api_key=api_key
-        )
+        if base_url:
+            llm_kwargs["base_url"] = base_url
+            
+        self.llm = ChatOpenAI(**llm_kwargs)
         
         # Select which prompt to use
         if safe_mode:
@@ -220,6 +229,7 @@ def create_agent_from_env(tools: List[BaseTool]) -> CodeAgent:
     # Get configuration from environment
     model_name = os.getenv("MODEL_NAME", "gpt-4o")
     api_key = os.getenv("OPENAI_API_KEY")
+    base_url = os.getenv("OPENAI_BASE_URL")  # Add support for custom base URL
     temperature = float(os.getenv("TEMPERATURE", "0"))
     verbose = os.getenv("VERBOSE", "True").lower() == "true"
     detailed_prompt = os.getenv("DETAILED_PROMPT", "False").lower() == "true"
@@ -231,6 +241,7 @@ def create_agent_from_env(tools: List[BaseTool]) -> CodeAgent:
         tools=tools,
         model_name=model_name,
         api_key=api_key,
+        base_url=base_url,  # Pass the base URL to the agent
         temperature=temperature,
         verbose=verbose,
         detailed_prompt=detailed_prompt,

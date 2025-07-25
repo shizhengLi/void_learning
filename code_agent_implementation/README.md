@@ -24,6 +24,7 @@ pip install -r requirements.txt
 
 ```
 OPENAI_API_KEY=your_api_key_here
+OPENAI_BASE_URL=https://api.openai.com/v1  # 可选，用于自定义API端点
 MODEL_NAME=gpt-4o
 TEMPERATURE=0
 ```
@@ -53,7 +54,23 @@ python3 main.py --model gpt-3.5-turbo
 
 # Set working directory
 python3 main.py --dir /path/to/your/project
+
+# Run in demo mode (no API calls)
+python3 main.py --demo
 ```
+
+### Using Custom API Endpoint
+
+If you need to use a custom OpenAI API endpoint, set the `OPENAI_BASE_URL` environment variable:
+
+```
+OPENAI_BASE_URL=https://your-custom-endpoint.com/v1
+```
+
+This is useful when:
+- Using OpenAI-compatible API services
+- Working with a proxy server
+- Using local model deployments
 
 ## Examples
 
