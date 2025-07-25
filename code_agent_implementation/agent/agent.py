@@ -8,7 +8,7 @@ import json
 from typing import List, Dict, Any, Optional, Union
 from dotenv import load_dotenv
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, FunctionMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import AgentExecutor
 from langchain.agents.format_scratchpad import format_to_openai_function_messages
@@ -85,6 +85,27 @@ def _convert_tool_to_openai_function(tool: BaseTool) -> Dict[str, Any]:
     }
     
     return function_def
+
+
+# Custom function to format intermediate steps to ensure proper message structure
+def custom_format_to_openai_function_messages(intermediate_steps):
+    """Format intermediate steps to ensure valid message structure.
+    
+    Args:
+        intermediate_steps: List of (action, observation) tuples
+        
+    Returns:
+        List of messages
+    """
+    messages = []
+    for action, observation in intermediate_steps:
+        messages.append(
+            FunctionMessage(
+                name=action.tool,
+                content=str(observation) if observation is not None else "",
+            )
+        )
+    return messages
 
 
 class CodeAgent:
@@ -169,7 +190,7 @@ class CodeAgent:
             {
                 "input": lambda x: x["input"],
                 "chat_history": lambda x: x.get("chat_history", []),
-                "agent_scratchpad": lambda x: format_to_openai_function_messages(
+                "agent_scratchpad": lambda x: custom_format_to_openai_function_messages(
                     x.get("intermediate_steps", [])
                 ),
                 "tools": lambda _: self._get_tools_description(),
@@ -221,22 +242,41 @@ class CodeAgent:
                 max_iterations=15
             )
             
-            # Run the agent
-            result = await temp_executor.ainvoke({
-                "input": query, 
-                "chat_history": self.chat_history.messages
-            })
+            try:
+                # Run the agent
+                result = await temp_executor.ainvoke({
+                    "input": query, 
+                    "chat_history": self.chat_history.messages
+                })
+                
+                # Add AI response to chat history
+                self.chat_history.add_ai_message(result["output"])
+                
+                return result
+            except Exception as e:
+                error_message = f"Error during agent execution: {str(e)}"
+                print(f"\n❌ {error_message}")
+                # Add error message to chat history
+                self.chat_history.add_ai_message(f"I encountered an error: {str(e)}. Let's try again with a different approach.")
+                return {"output": error_message}
         else:
-            # Run without approval
-            result = await self.agent_executor.ainvoke({
-                "input": query, 
-                "chat_history": self.chat_history.messages
-            })
-        
-        # Add AI response to chat history
-        self.chat_history.add_ai_message(result["output"])
-        
-        return result
+            try:
+                # Run without approval
+                result = await self.agent_executor.ainvoke({
+                    "input": query, 
+                    "chat_history": self.chat_history.messages
+                })
+                
+                # Add AI response to chat history
+                self.chat_history.add_ai_message(result["output"])
+                
+                return result
+            except Exception as e:
+                error_message = f"Error during agent execution: {str(e)}"
+                print(f"\n❌ {error_message}")
+                # Add error message to chat history
+                self.chat_history.add_ai_message(f"I encountered an error: {str(e)}. Let's try again with a different approach.")
+                return {"output": error_message}
     
     def _get_tools_description(self) -> str:
         """Get a string description of all available tools.
@@ -310,7 +350,11 @@ class CodeAgent:
             
             if approval.lower() == 'y':
                 # Run the original tool
-                return original_run(*args, **kwargs)
+                result = original_run(*args, **kwargs)
+                # Ensure result is a string to avoid null content errors
+                if result is None:
+                    return "Operation completed successfully but returned no output."
+                return result
             else:
                 # Return a rejection message
                 return f"Action cancelled by user: {tool.name}({all_args})"
