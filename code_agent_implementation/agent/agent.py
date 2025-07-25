@@ -41,6 +41,8 @@ class LoopPreventionHandler(BaseCallbackHandler):
         self.identical_calls = {}
         self.max_consecutive_calls = max_consecutive_calls
         self.max_identical_calls = max_identical_calls
+        # 特别处理空文件的情况
+        self.empty_file_reads = set()
 
     def on_tool_start(self, serialized: Dict[str, Any], input_str: str, **kwargs) -> None:
         """Called when a tool starts running.
@@ -50,6 +52,22 @@ class LoopPreventionHandler(BaseCallbackHandler):
             input_str: Input to the tool
         """
         tool_name = serialized.get("name", "unknown")
+        
+        # 特别处理文件读取的情况
+        if tool_name == "read_file" and "file_path" in input_str:
+            # 尝试提取文件路径
+            try:
+                import json
+                args = json.loads(input_str)
+                file_path = args.get("file_path", "")
+                
+                # 如果这个文件之前被检测为空，直接提前结束
+                if file_path in self.empty_file_reads:
+                    raise ValueError(
+                        f"Avoiding repeated reads of empty file: {file_path}"
+                    )
+            except json.JSONDecodeError:
+                pass
         
         # Create a hash of tool name + args to track identical calls
         call_hash = hashlib.md5(f"{tool_name}:{input_str}".encode()).hexdigest()
@@ -83,6 +101,28 @@ class LoopPreventionHandler(BaseCallbackHandler):
         # Keep history at a reasonable size
         if len(self.tool_call_history) > 100:
             self.tool_call_history = self.tool_call_history[-100:]
+            
+    def on_tool_end(self, output: str, **kwargs) -> None:
+        """Called when a tool finishes running.
+        
+        Args:
+            output: Output of the tool
+        """
+        if not self.tool_call_history:
+            return
+            
+        # 检查最后一次调用是否是read_file，且返回空字符串
+        last_tool, last_input = self.tool_call_history[-1]
+        if last_tool == "read_file" and output == '':
+            try:
+                import json
+                args = json.loads(last_input)
+                file_path = args.get("file_path", "")
+                if file_path:
+                    # 标记这个文件是空的，避免重复读取
+                    self.empty_file_reads.add(file_path)
+            except json.JSONDecodeError:
+                pass
 
 
 def _convert_tool_to_openai_function(tool: BaseTool) -> Dict[str, Any]:
@@ -307,11 +347,26 @@ class CodeAgent:
                 # For file operations, check if file exists first for certain tools
                 if tool.name == "read_file" and "file_path" in kwargs:
                     file_path = kwargs["file_path"]
+                    
+                    # 检查文件是否存在
                     if not os.path.exists(file_path):
                         return f"Error: File '{file_path}' does not exist. Please verify the path."
                     
+                    # 检查是否为文件
+                    if not os.path.isfile(file_path):
+                        return f"Error: '{file_path}' is a directory, not a file."
+                    
+                    # 检查文件是否为空
+                    if os.path.getsize(file_path) == 0:
+                        return f"Note: File '{file_path}' exists but is empty."
+                    
                 # Run the original tool
                 result = original_run(*args, **kwargs)
+                
+                # 特别处理文件读取返回空字符串的情况
+                if tool.name == "read_file" and result == '' and "file_path" in kwargs:
+                    file_path = kwargs["file_path"]
+                    return f"Note: File '{file_path}' exists but is empty."
                 
                 # Ensure result is not None
                 if result is None:
