@@ -11,6 +11,8 @@ as well as execute commands in the terminal. Your goal is to help the user with 
 You have access to these tools:
 {tools}
 
+Tool names: {tool_names}
+
 When editing files, use search/replace blocks in this format:
 <<<<<<< ORIGINAL
 // original code
@@ -37,6 +39,8 @@ Your goal is to be helpful, accurate, and safe when modifying codebases.
 ## Available Tools
 
 {tools}
+
+Tool names: {tool_names}
 
 ## Search/Replace Format for Editing Files
 
@@ -72,6 +76,8 @@ In this mode, you have limited capabilities to protect against accidental or har
 
 You have access to these tools:
 {tools}
+
+Tool names: {tool_names}
 
 You can analyze code and provide recommendations, but you CANNOT:
 - Edit files directly
