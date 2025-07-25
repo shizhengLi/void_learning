@@ -32,6 +32,14 @@ A comparison of different AI code editor agent architectures:
 - JetBrains AI's plugin-based approach
 - LangChain-based standalone implementation
 
+### 4. [Codebase Indexing Deep Analysis](codebase_indexing_analysis/)
+A comprehensive deep-dive analysis of modern AI code editor indexing technologies:
+- **[Overview](codebase_indexing_analysis/README.md)**: Analysis roadmap and methodology
+- **[Indexing Fundamentals](codebase_indexing_analysis/01_indexing_fundamentals.md)**: Core principles and AI vs traditional IDE comparison
+- **[Void Architecture Deep Dive](codebase_indexing_analysis/02_void_architecture_deep_dive.md)**: DirectoryStrService implementation analysis
+- **[Vector Search Analysis](codebase_indexing_analysis/05_vector_search_analysis.md)**: Whether Void uses vector databases and semantic search
+- Performance optimization strategies, large codebase handling, and interview preparation materials
+
 ## Getting Started
 
 If you're new to AI code editor agents, we recommend reading the documents in this order:
