@@ -10,7 +10,8 @@ from typing import Union
 
 # 添加路径以便导入模块
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-from src.core.hash import HashCalculator
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from core.hash import HashCalculator
 
 
 class Blob:
