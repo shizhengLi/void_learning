@@ -1,103 +1,72 @@
-# Merkle Tree 原理解析
+# 🚧 文档已迁移
 
-## 什么是Merkle Tree
+**注意：本文档已被更详细和系统化的文档所替代。**
 
-默克尔树（Merkle Tree）也叫哈希树，是一种树形数据结构：
+## 📚 新文档位置
 
-### 基本结构
-- **叶子节点（Leaf Node）**：每个叶子节点存储的是某个数据块的加密哈希值
-- **非叶子节点（Branch/Inner Node）**：每个非叶子节点存储的是其所有子节点哈希值拼接后的哈希
+请查看 `docs/` 目录中的完整文档集：
 
-### 构建过程示例
+- **[基础概念](docs/01_merkle_tree基础概念.md)** - 从零开始理解 Merkle Tree
+- **[原理详解](docs/02_merkle_tree原理详解.md)** - 深入理解数学原理和算法
+- **[Git 应用](docs/03_merkle_tree在git中的应用.md)** - 通过 Git 理解实际应用
+- **[高级特性](docs/04_merkle_tree高级特性与优化.md)** - 掌握高级技术和优化
+- **[文档索引](docs/README.md)** - 完整的文档导航
 
-假设有两个数据块 L1 和 L2：
+## 🎯 快速开始
 
-1. 先分别对 L1、L2 计算哈希，得到 Hash 0-0 和 Hash 0-1
-2. 然后将 Hash 0-0 和 Hash 0-1 拼接，再计算一次哈希，得到 Hash 0（父节点）
-3. 最后将Hash 0与Hash 1拼接, 再计算一次哈希, 得到Top Hash(根节点)
+如果您是初学者，建议按以下顺序学习：
 
-## Merkle Tree 的作用
+1. **[基础概念](docs/01_merkle_tree基础概念.md)** - 理解哈希函数和树结构
+2. **[示例代码](examples/basic_workflow.py)** - 动手实践
+3. **[Git 应用](docs/03_merkle_tree在git中的应用.md)** - 实际应用场景
 
-### 1. 高效验证
-要证明某个数据块属于这棵树，只需要提供从该叶子节点到根节点路径上的"兄弟节点"哈希值。验证复杂度为 O(log n)，而不是 O(n)。
+## 🛠️ 实践资源
 
-### 2. 数据完整性保证
-只要根哈希（Merkle Root）保持不变，就能确保整个数据集未被篡改。任何底层数据的修改都会导致根哈希发生变化。
+### 运行示例
+```bash
+# 基础工作流程
+python examples/basic_workflow.py
 
-### 3. 增量同步
-通过比较不同版本的Merkle Tree，可以快速定位发生变化的数据块，实现高效的增量同步。
+# 配置管理
+python examples/config_management.py
 
-## Merkle Tree 的应用场景
+# 标签管理
+python examples/tag_management.py
 
-### 区块链技术
-比特币、以太坊等用于验证交易数据的完整性
-
-### 分布式存储
-IPFS、Amazon DynamoDB等用于数据一致性校验
-
-### 版本控制系统
-Git使用类似机制追踪文件变更和验证仓库完整性
-
-## Git中的Merkle Tree应用
-
-### Git对象分类
-Git 的对象分为四类：blob、tree、commit、tag
-
-Merkle Tree 结构体现在 blob、tree、commit 这三层
-
-- **blob**：存储文件内容（叶子节点）
-- **tree**：存储目录结构，记录目录下所有的 blob/tree 的哈希（中间节点）
-- **commit**：存储一次提交，指向一个 tree（根节点），并且包含父 commit 的哈希以及作者、时间等信息
-
-### Git示例
-
-#### 第一次提交
-```
-commit: a5c4eb6c4ed44900b95443d46ed36eda32565153
-  |
-  tree: 8bcb6f78f38f983a8448ecdb31c467e7f939a0a3
-   ├── README.md → blob: f70f10e4db19068f79bc43844b49f3eece45c4e8   (内容: A)
-   └── src/
-         |
-         tree: f12699dee33a0dee793f9f12d78f72e4c1db66ee
-             └── main.java → blob: 62d8fe9f6db631bd3a19140699101c9e281c9f9d   (内容: X)
+# Merkle Tree 演示
+python examples/merkle_tree_demo.py
 ```
 
-#### 第二次提交
-修改 src/main.java，内容变为 Y，README.md 没变：
-
+### 源码结构
 ```
-commit: 89525719a212f4eca05046aabd270ffb33986359
-  |
-  tree: c804c7202de606c518dc2bef93d9e3a5c5e71da2
-   ├── README.md → blob: f70f10e4db19068f79bc43844b49f3eece45c4e8   (内容: A)
-   └── src/
-         |
-         tree: 52e68717674074112abe8865a0be7fc111b1e523
-             └── main.java → blob: 9bda8c35c2f1978aa4b691660a4a1337523d3ce4   (内容: Y)
+src/
+├── objects/     # Git 对象实现
+├── core/        # 核心功能
+├── commands/    # 命令行接口
+└── utils/       # 工具函数
 ```
 
-只要递归对比两次提交的 tree 结构，找到哈希不同的 blob，就能精准识别出所有被修改的文件。
+## 📖 原文内容摘要
 
-## Merkle Tree在Git中的功能总结
+Merkle Tree（默克尔树）是一种基于哈希函数的树形数据结构，具有以下核心特性：
 
-### 1. 高效完整性校验，防篡改
-- 每个对象（blob、tree、commit）都用哈希值唯一标识，任何内容变动都会导致哈希变化
-- 只要根哈希（commit 哈希）没变，说明整个项目历史、内容都没被篡改
+- **数据完整性**：任何修改都会导致根哈希变化
+- **高效验证**：O(log n) 的验证复杂度
+- **增量更新**：局部修改不影响整体结构
+- **空间优化**：相同数据只存储一次
 
-### 2. 高效存储与去重
-- 相同内容的文件（blob）或目录结构（tree）只存一份，极大节省空间
-- 没有变动的部分直接复用历史对象，无需重复存储
+### 应用场景
+- 区块链（比特币、以太坊）
+- 分布式存储（IPFS、DynamoDB）
+- 版本控制系统（Git）
+- 数据库系统
 
-### 3. 高效对比和查找变更
-- 只需对比 tree 或 commit 的哈希，就能快速判断两次提交是否完全一致
-- 递归对比 tree 结构，可以高效定位到具体变动的文件和内容
+## 🔗 相关链接
 
-### 4. 历史可追溯，结构清晰
-- 每个 commit 通过 parent 字段串联，形成不可篡改的历史链
-- 可以随时还原任意历史时刻的完整项目快照
+- [GitHub Repository](https://github.com/your-repo/merkle-tree)
+- [完整文档](docs/README.md)
+- [示例代码](examples/)
 
+---
 
-### 感谢：
-
-[阿里巴巴开发者公众号｜好奇心之旅：Cursor代码库索引机制的学习笔记](https://mp.weixin.qq.com/s/fj-9rOPEq_eF05VLQizX1g)
+*本文档已由更完整的文档集替代，请查看新文档以获得最佳学习体验。*
