@@ -1,0 +1,4 @@
+# 是 Python 标准库模块，不需要也不应该通过 pip 安装
+# hashlib>=3.8.0
+# pathlib>=1.0.1
+# zlib>=0.6.0
