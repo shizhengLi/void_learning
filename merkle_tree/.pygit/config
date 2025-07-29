@@ -1,0 +1,10 @@
+{
+  "core": {
+    "bare": false,
+    "repositoryformatversion": 0
+  },
+  "user": {
+    "name": "Test User",
+    "email": "test@example.com"
+  }
+}
