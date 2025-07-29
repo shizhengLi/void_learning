@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "path": "README.md",
+      "mode": "100644",
+      "blob_hash": "591e6b8b9ad710aa012b8438a38aa22f29e0476d",
+      "size": 15,
+      "mtime": 1753812676.9308996,
+      "stage": 0
+    },
+    {
+      "path": "main.py",
+      "mode": "100644",
+      "blob_hash": "3bbd26c1ee7dad5a70607f69f3719380e5db17a7",
+      "size": 42,
+      "mtime": 1753813218.296288,
+      "stage": 0
+    }
+  ]
+}
